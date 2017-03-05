@@ -129,8 +129,8 @@ class TC_GAME_API Item : public Object
         bool IsInBag() const { return m_container != nullptr; }
         bool IsEquipped() const;
 
-        uint32 GetSkill();
-        uint32 GetSpell();
+        uint32 GetSkill() const;
+        uint32 GetSpell() const;
 
         // RandomPropertyId (signed but stored as unsigned)
         int32 GetItemRandomPropertyId() const { return GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID); }

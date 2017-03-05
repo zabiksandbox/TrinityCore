@@ -164,6 +164,9 @@ class TC_GAME_API Object
         DynamicObject* ToDynObject() { if (GetTypeId() == TYPEID_DYNAMICOBJECT) return reinterpret_cast<DynamicObject*>(this); else return nullptr; }
         DynamicObject const* ToDynObject() const { if (GetTypeId() == TYPEID_DYNAMICOBJECT) return reinterpret_cast<DynamicObject const*>(this); else return nullptr; }
 
+        // return const pointer to fields
+        uint32 const* GetUIntFieldValues() const { return m_uint32Values; }
+
     protected:
         Object();
 

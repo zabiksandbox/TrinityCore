@@ -20,6 +20,8 @@
 /// @{
 /// \file
 
+#include <boost/asio/deadline_timer.hpp>
+#include "AuctionHouseListing.h"
 #include "Common.h"
 #include "AppenderDB.h"
 #include "AsyncAcceptor.h"
@@ -330,6 +332,9 @@ extern int main(int argc, char** argv)
 
     sScriptMgr->OnStartup();
 
+    // start auction house listing thread
+    std::thread* auctionHouseListingThread = new std::thread(AuctionHouseListing::AuctionHouseListingThread);
+
     WorldUpdateLoop();
 
     // Shutdown starts here
@@ -341,6 +346,9 @@ extern int main(int argc, char** argv)
 
     // set server offline
     LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | %u WHERE id = '%d'", REALM_FLAG_OFFLINE, realm.Id.Realm);
+
+    auctionHouseListingThread->join();
+    delete auctionHouseListingThread;
 
     TC_LOG_INFO("server.worldserver", "Halting process...");
 
