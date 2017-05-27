@@ -3019,8 +3019,7 @@ bool Player::AddTalent(uint32 spellId, uint8 spec, bool learning)
             }
         }
 
-        
-        (*m_talents[spec])[spellId] = { (learning ? PLAYERSPELL_NEW : PLAYERSPELL_UNCHANGED), spec }; 
+        (*m_talents[spec])[spellId] = { (learning ? PLAYERSPELL_NEW : PLAYERSPELL_UNCHANGED), spec };
         return true;
     }
     return false;
@@ -19959,7 +19958,7 @@ void Player::_SaveSpells(SQLTransaction& trans)
             continue;
         }
 
-        if (itr->second->state != PLAYERSPELL_TEMPORARY)
+        if (itr->second.state != PLAYERSPELL_TEMPORARY)
             itr->second.state = PLAYERSPELL_UNCHANGED;
 
         ++itr;
