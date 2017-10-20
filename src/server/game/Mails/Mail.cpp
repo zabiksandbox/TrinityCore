@@ -131,7 +131,11 @@ void MailDraft::deleteIncludedItems(SQLTransaction& trans, bool inDB /*= false*/
             trans->Append(stmt);
         }
 
-        delete item;
+        // If item belongs to an auction, remove it safely
+        if (AuctionEntry* auction = sAuctionMgr->GetAuctionFromItem(item))
+            auction->RemoveItem(true);
+        else
+            delete item;
     }
 
     m_items.clear();

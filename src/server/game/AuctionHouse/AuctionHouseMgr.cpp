@@ -241,12 +241,11 @@ void AuctionHouseMgr::SendAuctionWonMail(AuctionEntry* auction, SQLTransaction& 
         MailDraft(auction->BuildAuctionMailSubject(AUCTION_WON), AuctionEntry::BuildAuctionMailBody(auction->owner, auction->bid, auction->buyout, 0, 0))
             .AddItem(auction->item)
             .SendMailTo(trans, MailReceiver(bidder, auction->bidder), auction, MAIL_CHECK_MASK_COPIED);
-        auction->RemoveItem();
     }
     else
     {
         // bidder doesn't exist, delete the item
-        auction->RemoveItem(true);
+        auction->RemoveItem(false, true, &trans);
     }
 }
 
@@ -314,7 +313,7 @@ void AuctionHouseMgr::SendAuctionExpiredMail(AuctionEntry* auction, SQLTransacti
     else
     {
         // owner doesn't exist, delete the item
-        auction->RemoveItem(true);
+        auction->RemoveItem(false, true, &trans);
     }
 }
 
@@ -643,7 +642,7 @@ bool AuctionHouseObject::RemoveAuction(AuctionEntry* auction)
     sScriptMgr->OnAuctionRemove(this, auction);
 
     // we need to delete the entry, it is not referenced any more
-    auction->RemoveItem(true);
+    auction->RemoveItem();
 
     delete auction;
     return wasInMap;
@@ -831,7 +830,7 @@ bool AuctionEntry::AddItem(Item* itemObj)
     item = itemObj;
     return true;
 }
-bool AuctionEntry::RemoveItem(bool deleteItem /* = false */)
+bool AuctionEntry::RemoveItem(bool deleteObj /* = false */, bool deleteDb /* = false */, SQLTransaction* trans /* = nullptr */)
 {
     if (!item)
         return false;
@@ -839,8 +838,14 @@ bool AuctionEntry::RemoveItem(bool deleteItem /* = false */)
     if (!sAuctionMgr->RemoveAuctionItem(item))
         return false;
 
-    if (deleteItem)
+    if (deleteObj)
         delete item;
+    else if (deleteDb)
+    {
+        ASSERT(trans);
+        item->FSetState(ITEM_REMOVED);
+        item->SaveToDB(*trans);
+    }
 
     item = nullptr;
     return true;

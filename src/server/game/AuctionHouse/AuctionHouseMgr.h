@@ -128,7 +128,7 @@ struct TC_GAME_API AuctionEntry
     static std::string BuildAuctionMailBody(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut);
     static std::string BuildAuctionMailBodyWithTime(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut, tm& time);
     bool AddItem(Item* item);
-    bool RemoveItem(bool deleteItem = false);
+    bool RemoveItem(bool deleteObj = false, bool deleteDb = false, SQLTransaction* trans = nullptr);
 };
 
 //this class is used as auctionhouse instance
