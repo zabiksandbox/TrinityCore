@@ -106,7 +106,7 @@ static std::string GetItemName(Player const* player, AuctionEntry const* auction
             name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
         }
     }
-    return name.c_str();
+    return name;
 }
 
 AuctionHouseMgr::AuctionHouseMgr() { }
@@ -376,6 +376,7 @@ void AuctionHouseMgr::LoadAuctionItems()
 
     uint32 count = 0;
 
+    std::unordered_set<Item*> itemRemoveList;
     do
     {
         Field* fields = result->Fetch();
@@ -391,28 +392,31 @@ void AuctionHouseMgr::LoadAuctionItems()
             continue;
         }
 
-        Item* item = NewItemOrBag(proto);
-        if (!item->LoadFromDB(item_guid, ObjectGuid::Empty, fields, itemEntry))
-        {
-            delete item;
-            continue;
-        }
-
         if (AuctionHouseObject* auctionMap = GetAuctionsMapByHouseId(houseId))
         {
             if (AuctionEntry* auction = auctionMap->GetAuction(auctionId))
             {
+                Item* item = NewItemOrBag(proto);
+                if (!item->LoadFromDB(item_guid, ObjectGuid::Empty, fields, itemEntry))
+                {
+                    delete item;
+                    continue;
+                }
+
                 auction->AddItem(item);
                 if (auction->item)
-                    auction->itemName = strdup(GetItemName(nullptr, nullptr, auction->item).c_str());
+                {
+                    std::string itemName = GetItemName(nullptr, nullptr, auction->item).c_str();
+                    auction->itemName = itemName.empty() ? nullptr : strdup(itemName.c_str());
+                    itemRemoveList.erase(item);
+                    ++count;
+                }
             }
         }
-        ++count;
     }
     while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded %u auction items in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
-
 }
 
 void AuctionHouseMgr::LoadAuctions()
@@ -619,7 +623,7 @@ AuctionHouseObject::~AuctionHouseObject()
     for (AuctionEntryMap::iterator itr = AuctionsMap.begin(); itr != AuctionsMap.end(); ++itr)
     {
         if (itr->second->itemName)
-            delete itr->second->itemName;
+            free (itr->second->itemName);
         delete itr->second;
     }
 }
