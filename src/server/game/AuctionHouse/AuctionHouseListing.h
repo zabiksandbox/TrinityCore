@@ -40,15 +40,12 @@ namespace boost
     }
 }
 
-enum InventoryResult : uint8;
-
 class AuctionHouseObject;
 
 constexpr uint32 SkillFieldsSize = 384; // PLAYER_SKILL_INFO_1_1 size
 constexpr uint32 AuctionItemPacketSize = (12 * 4 + 8 * 2 + (MAX_INSPECTED_ENCHANTMENT_SLOT * 12));
 
 // Defined in AuctionHouseMgr.h
-enum AuctionSortOrder;
 struct AuctionSortInfo;
 
 typedef std::vector<AuctionSortInfo> AuctionSortOrderVector;
