@@ -73,12 +73,31 @@ enum AuctionHouses
     AUCTIONHOUSE_NEUTRAL        = 7
 };
 
+enum AuctionSortOrder
+{
+    AUCTION_SORT_MINLEVEL = 0,
+    AUCTION_SORT_RARITY = 1,
+    AUCTION_SORT_BUYOUT = 2,
+    AUCTION_SORT_TIMELEFT = 3,
+    AUCTION_SORT_UNK4 = 4,
+    AUCTION_SORT_ITEM = 5,
+    AUCTION_SORT_MINBIDBUY = 6,
+    AUCTION_SORT_OWNER = 7,
+    AUCTION_SORT_BID = 8,
+    AUCTION_SORT_STACK = 9
+};
+
+struct AuctionSortInfo
+{
+    AuctionSortOrder sortOrder;
+    bool isDesc;
+};
+
 struct TC_GAME_API AuctionEntry
 {
     uint32 Id;
     uint8 houseId;
-    ObjectGuid::LowType itemGUIDLow;
-    uint32 itemEntry;
+    Item* item;
     uint32 itemCount;
     ObjectGuid::LowType owner;
     uint32 startbid;                                        //maybe useless
@@ -90,29 +109,31 @@ struct TC_GAME_API AuctionEntry
     uint32 etime;
     AuctionHouseEntry const* auctionHouseEntry;             // in AuctionHouse.dbc
 
+    // Used just for sorting
+    uint32 quality;
+    char* itemName;
+    char* ownerName;
+
     // helpers
     uint8 GetHouseId() const { return houseId; }
     uint32 GetAuctionCut() const;
     uint32 GetAuctionOutBid() const;
-    bool BuildAuctionInfo(WorldPacket & data, Item* sourceItem = nullptr) const;
+    bool BuildAuctionInfo(WorldPacket & data) const;
     void DeleteFromDB(SQLTransaction& trans) const;
     void SaveToDB(SQLTransaction& trans) const;
     bool LoadFromDB(Field* fields);
     std::string BuildAuctionMailSubject(MailAuctionAnswers response) const;
     static std::string BuildAuctionMailBody(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut);
-
+    static std::string BuildAuctionMailBodyWithTime(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut, tm& time);
+    bool AddItem(Item* item);
+    bool RemoveItem();
 };
 
 //this class is used as auctionhouse instance
 class TC_GAME_API AuctionHouseObject
 {
   public:
-    ~AuctionHouseObject()
-    {
-        for (AuctionEntryMap::iterator itr = AuctionsMap.begin(); itr != AuctionsMap.end(); ++itr)
-            delete itr->second;
-    }
-
+    ~AuctionHouseObject();
     typedef std::map<uint32, AuctionEntry*> AuctionEntryMap;
 
     uint32 Getcount() const { return AuctionsMap.size(); }
@@ -141,12 +162,11 @@ class TC_GAME_API AuctionHouseMgr
 {
     private:
         AuctionHouseMgr();
-        ~AuctionHouseMgr();
 
     public:
         static AuctionHouseMgr* instance();
 
-        typedef std::unordered_map<ObjectGuid::LowType, Item*> ItemMap;
+        typedef std::unordered_map<Item*, AuctionEntry*> ItemMap;
         typedef std::vector<AuctionEntry*> PlayerAuctions;
         typedef std::pair<PlayerAuctions*, uint32> AuctionPair;
 
@@ -154,13 +174,31 @@ class TC_GAME_API AuctionHouseMgr
         AuctionHouseObject* GetAuctionsMapByHouseId(uint8 auctionHouseId);
         AuctionHouseObject* GetBidsMap(uint32 factionTemplateId);
 
-        Item* GetAItem(ObjectGuid::LowType id)
+        AuctionEntry* GetAuctionFromItem(Item* item)
         {
-            ItemMap::const_iterator itr = mAitems.find(id);
+            ItemMap::const_iterator itr = mAitems.find(item);
             if (itr != mAitems.end())
                 return itr->second;
 
             return nullptr;
+        }
+
+        bool AddAuctionItem(AuctionEntry* auction, Item* item)
+        {
+            if (mAitems.find(item) != mAitems.end())
+                return false;
+
+            mAitems[item] = auction;
+            return true;
+        }
+
+        bool RemoveAuctionItem(Item* item)
+        {
+            if (mAitems.find(item) == mAitems.end())
+                return false;
+
+            mAitems.erase(item);
+            return true;
         }
 
         //auction messages
@@ -180,8 +218,6 @@ class TC_GAME_API AuctionHouseMgr
         void LoadAuctionItems();
         void LoadAuctions();
 
-        void AddAItem(Item* it);
-        bool RemoveAItem(ObjectGuid::LowType id, bool deleteItem = false, SQLTransaction* trans = nullptr);
         bool PendingAuctionAdd(Player* player, AuctionEntry* aEntry, Item* item);
         uint32 PendingAuctionCount(Player const* player) const;
         void PendingAuctionProcess(Player* player);

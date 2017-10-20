@@ -108,15 +108,14 @@ uint32 AuctionBotBuyer::GetItemInformation(BuyerConfiguration& config)
         if (!entry->owner || sAuctionBotConfig->IsBotChar(entry->owner))
             continue; // Skip auctions owned by AHBot
 
-        Item* item = sAuctionMgr->GetAItem(entry->itemGUIDLow);
-        if (!item)
+        if (!entry->item)
             continue;
 
-        BuyerItemInfo& itemInfo = config.SameItemInfo[item->GetEntry()];
+        BuyerItemInfo& itemInfo = config.SameItemInfo[entry->item->GetEntry()];
 
         // Update item entry's count and total bid prices
         // This can be used later to determine the prices and chances to bid
-        uint32 itemBidPrice = entry->startbid / item->GetCount();
+        uint32 itemBidPrice = entry->startbid / entry->item->GetCount();
         itemInfo.TotalBidPrice = itemInfo.TotalBidPrice + itemBidPrice;
         itemInfo.BidItemCount++;
 
@@ -131,7 +130,7 @@ uint32 AuctionBotBuyer::GetItemInformation(BuyerConfiguration& config)
         {
             // Update item entry's count and total buyout prices
             // This can be used later to determine the prices and chances to buyout
-            uint32 itemBuyPrice = entry->buyout / item->GetCount();
+            uint32 itemBuyPrice = entry->buyout / entry->item->GetCount();
             itemInfo.TotalBuyPrice = itemInfo.TotalBuyPrice + itemBuyPrice;
             itemInfo.BuyItemCount++;
 
@@ -287,8 +286,7 @@ void AuctionBotBuyer::BuyAndBidItems(BuyerConfiguration& config)
             continue;
         }
 
-        Item* item = sAuctionMgr->GetAItem(auction->itemGUIDLow);
-        if (!item)
+        if (!auction->item)
         {
             // auction item not accessible, possible auction in payment pending mode
             items.erase(itr++);
@@ -309,15 +307,15 @@ void AuctionBotBuyer::BuyAndBidItems(BuyerConfiguration& config)
         }
 
         BuyerItemInfo const* ahInfo = nullptr;
-        BuyerItemInfoMap::const_iterator sameItemItr = config.SameItemInfo.find(item->GetEntry());
+        BuyerItemInfoMap::const_iterator sameItemItr = config.SameItemInfo.find(auction->item->GetEntry());
         if (sameItemItr != config.SameItemInfo.end())
             ahInfo = &sameItemItr->second;
 
         TC_LOG_DEBUG("ahbot", "AHBot: Rolling for AHentry %u:", auction->Id);
 
         // Roll buy and bid chances
-        bool successBuy = RollBuyChance(ahInfo, item, auction, bidPrice);
-        bool successBid = RollBidChance(ahInfo, item, auction, bidPrice);
+        bool successBuy = RollBuyChance(ahInfo, auction->item, auction, bidPrice);
+        bool successBid = RollBidChance(ahInfo, auction->item, auction, bidPrice);
 
         // If roll bidding succesfully and bid price is above buyout -> buyout
         // If roll for buying was successful but not for bid, buyout directly
@@ -409,7 +407,7 @@ void AuctionBotBuyer::BuyEntry(AuctionEntry* auction, AuctionHouseObject* auctio
     auction->DeleteFromDB(trans);
 
     // Remove auction item and auction from memory
-    sAuctionMgr->RemoveAItem(auction->itemGUIDLow);
+    auction->RemoveItem();
     auctionHouse->RemoveAuction(auction);
 
     // Run SQLs

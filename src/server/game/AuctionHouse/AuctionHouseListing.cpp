@@ -17,6 +17,7 @@
 
 #include "AuctionHouseListing.h"
 #include "AuctionHouseMgr.h"
+#include "CharacterCache.h"
 #include "Creature.h"
 #include "DBCStores.h"
 #include "GameEventMgr.h"
@@ -39,6 +40,154 @@ namespace
     // Map of throttled players for GetAll, and throttle expiry time
     // Stored here, rather than player object to maintain persistence after logout
     std::unordered_map<ObjectGuid, time_t> _getAllThrottleMap;
+}
+
+static std::string GetItemName(Player const* player, AuctionEntry const* auction, Item const* item = nullptr)
+{
+    LocaleConstant localeConstant;
+    if (player)
+        localeConstant = player->GetSession()->GetSessionDbLocaleIndex();
+
+    // Performance only if we have player, auction and locale is enUS. Else we go slower route
+    if (auction && player && localeConstant == LOCALE_enUS && auction->itemName != nullptr)
+        return std::string(auction->itemName);
+
+    if (!item)
+        return "";
+
+    int locdbc_idx = LOCALE_enUS;
+    if (player)
+        locdbc_idx = player->GetSession()->GetSessionDbcLocale();
+    ItemTemplate const* proto = item->GetTemplate();
+
+    if (proto->Name1.empty())
+        return proto->Name1;
+
+    std::string name = proto->Name1;
+
+    // local name
+    if (player && localeConstant != LOCALE_enUS)
+        if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
+            ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
+
+    // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
+    //  that matches the search but it may not equal item->GetItemRandomPropertyId()
+    //  used in BuildAuctionInfo() which then causes wrong items to be listed
+    int32 propRefID = item->GetItemRandomPropertyId();
+
+    if (propRefID)
+    {
+        // Append the suffix to the name (ie: of the Monkey) if one exists
+        // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
+        //  even though the DBC names seem misleading
+
+        char* const* suffix = nullptr;
+
+        if (propRefID < 0)
+        {
+            ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
+            if (itemRandSuffix)
+                suffix = itemRandSuffix->nameSuffix;
+        }
+        else
+        {
+            ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
+            if (itemRandProp)
+                suffix = itemRandProp->nameSuffix;
+        }
+
+        // dbc local name
+        if (suffix)
+        {
+            // Append the suffix (ie: of the Monkey) to the name using localization
+            // or default enUS if localization is invalid
+            name += ' ';
+            name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
+        }
+    }
+    return name.c_str();
+}
+
+// Proof of concept, we should shift the info we're obtaining in here into AuctionEntry probably
+static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrderVector& sortOrder, Player* player)
+{
+    for (auto thisOrder : sortOrder)
+    {
+        switch (thisOrder.sortOrder)
+        {
+            case AUCTION_SORT_BID:
+                if (left->bid == right->bid)
+                    continue;
+                if (!thisOrder.isDesc)
+                    return (left->bid < right->bid);
+                else
+                    return (left->bid > right->bid);
+            case AUCTION_SORT_BUYOUT:
+                if (left->buyout == right->buyout)
+                    continue;
+                if (!thisOrder.isDesc)
+                    return (left->buyout < right->buyout);
+                else
+                    return (left->buyout > right->buyout);
+            case AUCTION_SORT_ITEM:
+            {
+                std::string nameLeft = GetItemName(player, left);
+                std::string nameRight = GetItemName(player, right);
+                int result = nameLeft.compare(nameRight);
+
+                if (result == 0)
+                    continue;
+
+                return thisOrder.isDesc ? result > 0 : result < 0;
+            }
+            case AUCTION_SORT_MINLEVEL:
+            {
+                ItemTemplate const* protoLeft = left->item->GetTemplate();
+                ItemTemplate const* protoRight = right->item->GetTemplate();
+                if (protoLeft->RequiredLevel == protoRight->RequiredLevel)
+                    continue;
+
+                if (!thisOrder.isDesc)
+                    return (protoLeft->RequiredLevel < protoRight->RequiredLevel);
+                else
+                    return (protoLeft->RequiredLevel > protoRight->RequiredLevel);
+            }
+            case AUCTION_SORT_OWNER:
+            {
+                std::string leftName = "";
+                std::string rightName = "";
+                sCharacterCache->GetCharacterNameByGuid(ObjectGuid(HighGuid::Player, left->owner), leftName);
+                sCharacterCache->GetCharacterNameByGuid(ObjectGuid(HighGuid::Player, right->owner), rightName);
+                int result = leftName.compare(rightName);
+                if (result == 0)
+                    continue;
+
+                return thisOrder.isDesc ? result > 0 : result < 0;
+            }
+            case AUCTION_SORT_RARITY:
+                break;
+            case AUCTION_SORT_STACK:
+                if (left->itemCount == right->itemCount)
+                    continue;
+                if (!thisOrder.isDesc)
+                    return (left->itemCount < right->itemCount);
+                else
+                    return (left->itemCount > right->itemCount);
+                break;
+            case AUCTION_SORT_TIMELEFT:
+                if (left->expire_time == right->expire_time)
+                    continue;
+                if (!thisOrder.isDesc)
+                    return (left->expire_time < right->expire_time);
+                else
+                    return (left->expire_time > right->expire_time);
+            case AUCTION_SORT_UNK4:
+                break;
+            case AUCTION_SORT_MINBIDBUY:
+                break;
+        }
+    }
+    return false;
 }
 
 void AuctionHouseListing::Update()
@@ -98,9 +247,9 @@ void AuctionHouseListing::AddListOwnItemsEvent(Player* player, uint32 faction)
     _requestsNew.push_back(new AuctionListOwnItemsEvent(player, faction));
 }
 
-void AuctionHouseListing::AddListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, uint8 getAll)
+void AuctionHouseListing::AddListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, AuctionSortOrderVector sortOrder, uint8 getAll)
 {
-    _requestsNew.push_back(new AuctionListItemsEvent(player, faction, searchedname, listfrom, levelmin, levelmax, usable, inventoryType, itemClass, itemSubClass, quality, getAll));
+    _requestsNew.push_back(new AuctionListItemsEvent(player, faction, searchedname, listfrom, levelmin, levelmax, usable, inventoryType, itemClass, itemSubClass, quality, sortOrder, getAll));
 }
 
 void AuctionHouseListing::AddListBidsEvent(Player* player, uint32 faction, WorldPacket& data)
@@ -122,8 +271,8 @@ AuctionListOwnItemsEvent::AuctionListOwnItemsEvent(Player* player, uint32 factio
 {
 }
 
-AuctionListItemsEvent::AuctionListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, uint8 getAll) :
-    AuctionListingEvent(player, faction), _searchedname(searchedname), _listfrom(listfrom), _levelmin(levelmin), _levelmax(levelmax), _usable(usable), _inventoryType(inventoryType), _itemClass(itemClass), _itemSubClass(itemSubClass), _quality(quality), _getAll(getAll),
+AuctionListItemsEvent::AuctionListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, AuctionSortOrderVector sortOrder, uint8 getAll) :
+    AuctionListingEvent(player, faction), _searchedname(searchedname), _listfrom(listfrom), _levelmin(levelmin), _levelmax(levelmax), _usable(usable), _inventoryType(inventoryType), _itemClass(itemClass), _itemSubClass(itemSubClass), _quality(quality), _sortOrder(sortOrder), _getAll(getAll),
     _isAlive(player->IsAlive()), _level(player->getLevel())
 {
     _skillStatus = player->GetSkillMap();
@@ -200,7 +349,7 @@ bool AuctionListItemsEvent::Execute()
     bool finished = BuildListAuctionItems(auctionHouse, listingData, player,
         wsearchedname, _listfrom, _levelmin, _levelmax, _usable,
         _inventoryType, _itemClass, _itemSubClass, _quality,
-        count, totalCount, (_getAll != 0 && sWorld->getIntConfig(CONFIG_AUCTION_GETALL_DELAY) != 0));
+        count, totalCount, _sortOrder, (_getAll != 0 && sWorld->getIntConfig(CONFIG_AUCTION_GETALL_DELAY) != 0));
 
     if (!finished)
         return false;
@@ -272,7 +421,7 @@ bool AuctionListBidsEvent::Execute()
 bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHouse, WorldPacket& data, Player* player,
     std::wstring const& wsearchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable,
     uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality,
-    uint32& count, uint32& totalcount, bool getall)
+    uint32& count, uint32& totalcount, AuctionSortOrderVector& sortorder, bool getall)
 {
     LocaleConstant localeConstant = player->GetSession()->GetSessionDbLocaleIndex();
     int locdbc_idx = player->GetSession()->GetSessionDbcLocale();
@@ -289,13 +438,12 @@ bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHou
             if (auction->expire_time < curTime)
                 continue;
 
-            Item* item = sAuctionMgr->GetAItem(auction->itemGUIDLow);
-            if (!item)
+            if (!auction->item)
                 continue;
 
             ++count;
             ++totalcount;
-            auction->BuildAuctionInfo(data, item);
+            auction->BuildAuctionInfo(data);
 
             if (count >= MAX_GETALL_RETURN)
                 break;
@@ -305,121 +453,128 @@ bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHou
         return true;
     }
 
+    std::vector<AuctionEntry*> auctionShortlist;
     // optimization, this is a simplified case
     if (itemClass == 0xffffffff && itemSubClass == 0xffffffff && inventoryType == 0xffffffff && quality == 0xffffffff && levelmin == 0x00 && levelmax == 0x00 && usable == 0x00 && wsearchedname.empty())
     {
-        totalcount = auctionHouse->Getcount();
-        if (listfrom < totalcount)
+        auto itr = auctionHouse->GetAuctionsBegin();
+        for (; itr != auctionHouse->GetAuctionsEnd(); ++itr)
+            auctionShortlist.push_back(itr->second);
+    }
+    else
+    {
+        for (auto itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
         {
-            auto itr = auctionHouse->GetAuctionsBegin();
-            std::advance(itr, listfrom);
-            for (; itr != auctionHouse->GetAuctionsEnd(); ++itr)
+            AuctionEntry* auction = itr->second;
+            // Skip expired auctions
+            if (auction->expire_time < curTime)
+                continue;
+
+            if (!auction->item)
+                continue;
+
+            ItemTemplate const* proto = auction->item->GetTemplate();
+
+            if (itemClass != 0xffffffff && proto->Class != itemClass)
+                continue;
+
+            if (itemSubClass != 0xffffffff && proto->SubClass != itemSubClass)
+                continue;
+
+            if (inventoryType != 0xffffffff && proto->InventoryType != inventoryType)
             {
-                itr->second->BuildAuctionInfo(data);
-                if ((++count) >= 50)
-                    break;
+                // exception, robes are counted as chests
+                if (inventoryType != INVTYPE_CHEST || proto->InventoryType != INVTYPE_ROBE)
+                    continue;
             }
+
+            if (quality != 0xffffffff && proto->Quality != quality)
+                continue;
+
+            if (levelmin != 0x00 && (proto->RequiredLevel < levelmin || (levelmax != 0x00 && proto->RequiredLevel > levelmax)))
+                continue;
+
+            if (usable != 0x00)
+            {
+                if (CanUseItem(auction->item, player) != EQUIP_ERR_OK)
+                    continue;
+            }
+
+            // Allow search by suffix (ie: of the Monkey) or partial name (ie: Monkey)
+            // No need to do any of this if no search term was entered
+            if (!wsearchedname.empty())
+            {
+                std::string name = proto->Name1;
+                if (name.empty())
+                    continue;
+
+                // local name
+                if (localeConstant >= LOCALE_enUS)
+                    if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
+                        ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
+
+                // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
+                //  that matches the search but it may not equal item->GetItemRandomPropertyId()
+                //  used in BuildAuctionInfo() which then causes wrong items to be listed
+                int32 propRefID = auction->item->GetItemRandomPropertyId();
+
+                if (propRefID)
+                {
+                    // Append the suffix to the name (ie: of the Monkey) if one exists
+                    // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
+                    //  even though the DBC names seem misleading
+
+                    char* const* suffix = nullptr;
+
+                    if (propRefID < 0)
+                    {
+                        ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
+                        if (itemRandSuffix)
+                            suffix = itemRandSuffix->nameSuffix;
+                    }
+                    else
+                    {
+                        ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
+                        if (itemRandProp)
+                            suffix = itemRandProp->nameSuffix;
+                    }
+
+                    // dbc local name
+                    if (suffix)
+                    {
+                        // Append the suffix (ie: of the Monkey) to the name using localization
+                        // or default enUS if localization is invalid
+                        name += ' ';
+                        name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
+                    }
+                }
+
+                // Perform the search (with or without suffix)
+                if (!Utf8FitTo(name, wsearchedname))
+                    continue;
+            }
+            auctionShortlist.push_back(auction);
         }
-        return true;
     }
 
-    for (auto itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
+    // Partial sort to improve performance a bit, but the last pages will burn
+    if (listfrom + 50 <= auctionShortlist.size())
+        std::partial_sort(auctionShortlist.begin(),
+            auctionShortlist.begin() + listfrom + 50, auctionShortlist.end(),
+            std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
+    else
+        std::sort(auctionShortlist.begin(), auctionShortlist.end(), std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
+
+    for (auto auction : auctionShortlist)
     {
-        AuctionEntry* auction = itr->second;
-        // Skip expired auctions
-        if (auction->expire_time < curTime)
-            continue;
-
-        Item* item = sAuctionMgr->GetAItem(auction->itemGUIDLow);
-        if (!item)
-            continue;
-
-        ItemTemplate const* proto = item->GetTemplate();
-
-        if (itemClass != 0xffffffff && proto->Class != itemClass)
-            continue;
-
-        if (itemSubClass != 0xffffffff && proto->SubClass != itemSubClass)
-            continue;
-
-        if (inventoryType != 0xffffffff && proto->InventoryType != inventoryType)
-        {
-            // exception, robes are counted as chests
-            if (inventoryType != INVTYPE_CHEST || proto->InventoryType != INVTYPE_ROBE)
-                continue;
-        }
-
-        if (quality != 0xffffffff && proto->Quality != quality)
-            continue;
-
-        if (levelmin != 0x00 && (proto->RequiredLevel < levelmin || (levelmax != 0x00 && proto->RequiredLevel > levelmax)))
-            continue;
-
-        if (usable != 0x00)
-        {
-            if (CanUseItem(item, player) != EQUIP_ERR_OK)
-                continue;
-        }
-
-        // Allow search by suffix (ie: of the Monkey) or partial name (ie: Monkey)
-        // No need to do any of this if no search term was entered
-        if (!wsearchedname.empty())
-        {
-            std::string name = proto->Name1;
-            if (name.empty())
-                continue;
-
-            // local name
-            if (localeConstant >= LOCALE_enUS)
-                if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
-                    ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
-
-            // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
-            //  that matches the search but it may not equal item->GetItemRandomPropertyId()
-            //  used in BuildAuctionInfo() which then causes wrong items to be listed
-            int32 propRefID = item->GetItemRandomPropertyId();
-
-            if (propRefID)
-            {
-                // Append the suffix to the name (ie: of the Monkey) if one exists
-                // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
-                //  even though the DBC names seem misleading
-
-                char* const* suffix = nullptr;
-
-                if (propRefID < 0)
-                {
-                    ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
-                    if (itemRandSuffix)
-                        suffix = itemRandSuffix->nameSuffix;
-                }
-                else
-                {
-                    ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
-                    if (itemRandProp)
-                        suffix = itemRandProp->nameSuffix;
-                }
-
-                // dbc local name
-                if (suffix)
-                {
-                    // Append the suffix (ie: of the Monkey) to the name using localization
-                    // or default enUS if localization is invalid
-                    name += ' ';
-                    name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
-                }
-            }
-
-            // Perform the search (with or without suffix)
-            if (!Utf8FitTo(name, wsearchedname))
-                continue;
-        }
-
         // Add the item if no search term or if entered search term was found
         if (count < 50 && totalcount >= listfrom)
         {
+            if (!auction->item)
+                continue;
+
             ++count;
-            auction->BuildAuctionInfo(data, item);
+            auction->BuildAuctionInfo(data);
         }
         ++totalcount;
     }

@@ -47,6 +47,12 @@ class AuctionHouseObject;
 constexpr uint32 SkillFieldsSize = 384; // PLAYER_SKILL_INFO_1_1 size
 constexpr uint32 AuctionItemPacketSize = (12 * 4 + 8 * 2 + (MAX_INSPECTED_ENCHANTMENT_SLOT * 12));
 
+// Defined in AuctionHouseMgr.h
+enum AuctionSortOrder;
+struct AuctionSortInfo;
+
+typedef std::vector<AuctionSortInfo> AuctionSortOrderVector;
+
 class AuctionListingEvent
 {
     public:
@@ -73,14 +79,14 @@ class AuctionListOwnItemsEvent : public AuctionListingEvent
 class AuctionListItemsEvent : public AuctionListingEvent
 {
     public:
-        AuctionListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, uint8 getAll);
+        AuctionListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, AuctionSortOrderVector sortOrder, uint8 getAll);
         bool Execute() override;
 
     private:
         bool BuildListAuctionItems(AuctionHouseObject* auctionHouse, WorldPacket& data, Player* player,
             std::wstring const& wsearchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable,
             uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality,
-            uint32& count, uint32& totalcount, bool getall);
+            uint32& count, uint32& totalcount, AuctionSortOrderVector& sortorder, bool getall);
 
         std::string _searchedname;
         uint32 _listfrom;
@@ -91,6 +97,7 @@ class AuctionListItemsEvent : public AuctionListingEvent
         uint32 _itemClass;
         uint32 _itemSubClass;
         uint32 _quality;
+        AuctionSortOrderVector _sortOrder;
         uint8 _getAll;
 
         // Duplication of CanUseItem
@@ -126,7 +133,7 @@ class TC_GAME_API AuctionHouseListing
         static void AuctionHouseListingHandler(boost::asio::deadline_timer* updateAuctionTimer, boost::system::error_code const& error);
 
         static void AddListOwnItemsEvent(Player* player, uint32 faction);
-        static void AddListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, uint8 getAll);
+        static void AddListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, AuctionSortOrderVector sortOrder, uint8 getAll);
         static void AddListBidsEvent(Player* player, uint32 faction, WorldPacket& data);
 
         static void SetListingAllowed(bool allowed);

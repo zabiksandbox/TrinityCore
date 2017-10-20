@@ -1866,11 +1866,11 @@ void World::SetInitialWorldSettings()
     sAchievementMgr->LoadCompletedAchievements();
 
     ///- Load dynamic data tables from the database
-    TC_LOG_INFO("server.loading", "Loading Item Auctions...");
-    sAuctionMgr->LoadAuctionItems();
-
     TC_LOG_INFO("server.loading", "Loading Auctions...");
     sAuctionMgr->LoadAuctions();
+
+    TC_LOG_INFO("server.loading", "Loading Auction Items...");
+    sAuctionMgr->LoadAuctionItems();
 
     TC_LOG_INFO("server.loading", "Loading Guilds...");
     sGuildMgr->LoadGuilds();

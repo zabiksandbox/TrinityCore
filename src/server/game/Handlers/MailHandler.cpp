@@ -623,8 +623,8 @@ void WorldSession::HandleGetMailList(WorldPacket& recvData)
             continue;
         }
 
-        // skip deleted or not delivered (deliver delay not expired) mails
-        if ((*itr)->state == MAIL_STATE_DELETED || cur_time < (*itr)->deliver_time)
+        // skip deleted or not delivered (deliver delay not expired) or not expired mails
+        if ((*itr)->state == MAIL_STATE_DELETED || cur_time < (*itr)->deliver_time || cur_time >(*itr)->expire_time)
             continue;
 
         uint8 item_count = (*itr)->items.size();            // max count is MAX_MAIL_ITEMS (12)

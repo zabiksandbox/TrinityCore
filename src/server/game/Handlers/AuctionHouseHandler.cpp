@@ -110,7 +110,7 @@ void WorldSession::SendAuctionOwnerNotification(AuctionEntry* auction)
     data << uint32(auction->bid);
     data << uint32(0);                                      //unk
     data << uint64(0);                                      //unk (bidder guid?)
-    data << uint32(auction->itemEntry);
+    data << uint32(auction->item->GetEntry());
     data << uint32(0);                                      //unk
     data << float(0);                                       //unk (time?)
     SendPacket(&data);
@@ -208,7 +208,7 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         if (itemEntry == 0)
             itemEntry = item->GetTemplate()->ItemId;
 
-        if (sAuctionMgr->GetAItem(item->GetGUID().GetCounter()) || !item->CanBeTraded() || item->IsNotEmptyBag() ||
+        if (sAuctionMgr->GetAuctionFromItem(item) || !item->CanBeTraded() || item->IsNotEmptyBag() ||
             (item->GetTemplate()->Flags & ITEM_FLAG_CONJURED) || item->GetUInt32Value(ITEM_FIELD_DURATION) ||
             item->GetCount() < count[i] || itemEntry != item->GetTemplate()->ItemId)
         {
@@ -300,8 +300,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         }
 
         AH->Id = sObjectMgr->GenerateAuctionID();
-        AH->itemGUIDLow = item->GetGUID().GetCounter();
-        AH->itemEntry = item->GetEntry();
         AH->itemCount = item->GetCount();
         AH->owner = _player->GetGUID().GetCounter();
         AH->startbid = bid;
@@ -312,6 +310,10 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         AH->deposit = deposit;
         AH->etime = etime;
         AH->auctionHouseEntry = auctionHouseEntry;
+        AH->item = nullptr;
+        AH->itemName = nullptr;
+        AH->ownerName = nullptr;
+        AH->AddItem(item);
 
         TC_LOG_INFO("network", "CMSG_AUCTION_SELL_ITEM: Player %s (guid %d) is selling item %s entry %u (guid %d) with count %u with initial bid %u with buyout %u and with time %u (in sec) in auctionhouse %u",
             _player->GetName().c_str(), _player->GetGUID().GetCounter(), item->GetTemplate()->Name1.c_str(), item->GetEntry(), item->GetGUID().GetCounter(), item->GetCount(), bid, buyout, auctionTime, AH->GetHouseId());
@@ -323,7 +325,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
             return;
         }
 
-        sAuctionMgr->AddAItem(item);
         auctionHouse->AddAuction(AH);
         _player->MoveItemFromInventory(item->GetBagSlot(), item->GetSlot(), true);
 
@@ -357,8 +358,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         }
 
         AH->Id = sObjectMgr->GenerateAuctionID();
-        AH->itemGUIDLow = newItem->GetGUID().GetCounter();
-        AH->itemEntry = newItem->GetEntry();
         AH->itemCount = newItem->GetCount();
         AH->owner = _player->GetGUID().GetCounter();
         AH->startbid = bid;
@@ -369,6 +368,10 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         AH->deposit = deposit;
         AH->etime = etime;
         AH->auctionHouseEntry = auctionHouseEntry;
+        AH->item = nullptr;
+        AH->itemName = nullptr;
+        AH->ownerName = nullptr;
+        AH->AddItem(newItem);
 
         TC_LOG_INFO("network", "CMSG_AUCTION_SELL_ITEM: Player %s (guid %d) is selling item %s entry %u (guid %d) with count %u with initial bid %u with buyout %u and with time %u (in sec) in auctionhouse %u",
             _player->GetName().c_str(), _player->GetGUID().GetCounter(), newItem->GetTemplate()->Name1.c_str(), newItem->GetEntry(), newItem->GetGUID().GetCounter(), newItem->GetCount(), bid, buyout, auctionTime, AH->GetHouseId());
@@ -380,7 +383,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
             return;
         }
 
-        sAuctionMgr->AddAItem(newItem);
         auctionHouse->AddAuction(AH);
         for (uint32 j = 0; j < itemsCount; ++j)
         {
@@ -542,7 +544,7 @@ void WorldSession::HandleAuctionPlaceBid(WorldPacket& recvData)
 
         auction->DeleteFromDB(trans);
 
-        sAuctionMgr->RemoveAItem(auction->itemGUIDLow);
+        auction->RemoveItem();
         auctionHouse->RemoveAuction(auction);
     }
     player->SaveInventoryAndGoldToDB(trans);
@@ -579,8 +581,7 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recvData)
     SQLTransaction trans = CharacterDatabase.BeginTransaction();
     if (auction && auction->owner == player->GetGUID().GetCounter())
     {
-        Item* pItem = sAuctionMgr->GetAItem(auction->itemGUIDLow);
-        if (pItem)
+        if (auction->item)
         {
             if (auction->bidder > 0)                        // If we have a bidder, we have to send him the money he paid
             {
@@ -594,12 +595,12 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recvData)
 
             // item will deleted or added to received mail list
             MailDraft(auction->BuildAuctionMailSubject(AUCTION_CANCELED), AuctionEntry::BuildAuctionMailBody(0, 0, auction->buyout, auction->deposit, 0))
-                .AddItem(pItem)
+                .AddItem(auction->item)
                 .SendMailTo(trans, player, auction, MAIL_CHECK_MASK_COPIED);
         }
         else
         {
-            TC_LOG_ERROR("network", "Auction id: %u has non-existed item (item guid : %u)!!!", auction->Id, auction->itemGUIDLow);
+            TC_LOG_ERROR("network", "Auction id: %u has non-existed item", auction->Id);
             SendAuctionCommandResult(0, AUCTION_CANCEL, ERR_AUCTION_DATABASE_ERROR);
             return;
         }
@@ -621,7 +622,7 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recvData)
     auction->DeleteFromDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
-    sAuctionMgr->RemoveAItem(auction->itemGUIDLow);
+    auction->RemoveItem();
     auctionHouse->RemoveAuction(auction);
 }
 
@@ -693,13 +694,59 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recvData)
 
     recvData >> getAll;
 
-    // this block looks like it uses some lame byte packing or similar...
-    uint8 unkCnt;
-    recvData >> unkCnt;
-    for (uint8 i = 0; i < unkCnt; i++)
+    // Read sort block
+    uint8 sortOrderCount;
+    recvData >> sortOrderCount;
+    AuctionSortOrderVector sortOrder;
+    uint8 orderNum = 1;
+    for (uint8 i = 0; i < sortOrderCount; i++)
     {
-        recvData.read_skip<uint8>();
-        recvData.read_skip<uint8>();
+        AuctionSortInfo sortInfo;
+        uint8 sortMode;
+        uint8 isDesc;
+        recvData >> sortMode;
+        recvData >> isDesc;
+        sortInfo.isDesc = (isDesc == 1);
+        sortInfo.sortOrder = static_cast<AuctionSortOrder>(sortMode);
+        sortOrder.push_back(sortInfo);
+        std::string orderMode = isDesc ? "Descending" : "Ascending";
+        switch (sortInfo.sortOrder)
+        {
+            case AUCTION_SORT_MINLEVEL:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_MINLEVEL (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_RARITY:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_RARITY (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_BUYOUT:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_BUYOUT (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_TIMELEFT:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_TIMELEFT (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_UNK4:
+                TC_LOG_INFO("misc", "Level %u - SortOrder: AUCTION_SORT_UNK4 (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_ITEM:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_ITEM (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_MINBIDBUY:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_MINBIDBUY (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_OWNER:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_OWNER (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_BID:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_BID (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_STACK:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_STACK (%s)", orderNum, orderMode.c_str());
+                break;
+            default:
+                TC_LOG_WARN("misc", "Level %u - Unknown Sort Order %u (%s)", orderNum, static_cast<uint8>(sortInfo.sortOrder), orderMode.c_str());
+                break;
+        }
+        orderNum++;
     }
 
     Creature* creature = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_AUCTIONEER);
@@ -716,7 +763,7 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recvData)
     TC_LOG_DEBUG("auctionHouse", "Auctionhouse search (%s) list from: %u, searchedname: %s, levelmin: %u, levelmax: %u, auctionSlotID: %u, auctionMainCategory: %u, auctionSubCategory: %u, quality: %u, usable: %u",
         guid.ToString().c_str(), listfrom, searchedname.c_str(), levelmin, levelmax, auctionSlotID, auctionMainCategory, auctionSubCategory, quality, usable);
 
-    AuctionHouseListing::AddListItemsEvent(_player, creature->GetFaction(), searchedname, listfrom, levelmin, levelmax, usable, auctionSlotID, auctionMainCategory, auctionSubCategory, quality, getAll);
+    AuctionHouseListing::AddListItemsEvent(_player, creature->GetFaction(), searchedname, listfrom, levelmin, levelmax, usable, auctionSlotID, auctionMainCategory, auctionSubCategory, quality, sortOrder, getAll);
 }
 
 void WorldSession::HandleAuctionListPendingSales(WorldPacket& recvData)

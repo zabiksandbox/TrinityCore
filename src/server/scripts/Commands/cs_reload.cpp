@@ -1102,8 +1102,8 @@ public:
     {
         ///- Reload dynamic data tables from the database
         TC_LOG_INFO("misc", "Re-Loading Auctions...");
-        sAuctionMgr->LoadAuctionItems();
         sAuctionMgr->LoadAuctions();
+        sAuctionMgr->LoadAuctionItems();
         handler->SendGlobalGMSysMessage("Auctions reloaded.");
         return true;
     }

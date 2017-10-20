@@ -529,10 +529,9 @@ uint32 AuctionBotSeller::SetStat(SellerConfiguration& config)
     for (AuctionHouseObject::AuctionEntryMap::const_iterator itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
     {
         AuctionEntry* auctionEntry = itr->second;
-        Item* item = sAuctionMgr->GetAItem(auctionEntry->itemGUIDLow);
-        if (item)
+        if (auctionEntry->item)
         {
-            ItemTemplate const* prototype = item->GetTemplate();
+            ItemTemplate const* prototype = auctionEntry->item->GetTemplate();
             if (prototype)
                 if (!auctionEntry->owner || sAuctionBotConfig->IsBotChar(auctionEntry->owner)) // Add only ahbot items
                     ++itemsSaved[prototype->Quality][prototype->Class];
@@ -917,8 +916,7 @@ void AuctionBotSeller::AddNewAuctions(SellerConfiguration& config)
         AuctionEntry* auctionEntry = new AuctionEntry();
         auctionEntry->Id = sObjectMgr->GenerateAuctionID();
         auctionEntry->owner = sAuctionBotConfig->GetRandChar();
-        auctionEntry->itemGUIDLow = item->GetGUID().GetCounter();
-        auctionEntry->itemEntry = item->GetEntry();
+        auctionEntry->item = nullptr;
         auctionEntry->startbid = bidPrice;
         auctionEntry->buyout = buyoutPrice;
         auctionEntry->houseId = houseid;
@@ -927,13 +925,11 @@ void AuctionBotSeller::AddNewAuctions(SellerConfiguration& config)
         auctionEntry->deposit = sAuctionMgr->GetAuctionDeposit(ahEntry, etime, item, stackCount);
         auctionEntry->auctionHouseEntry = ahEntry;
         auctionEntry->expire_time = time(nullptr) + urand(config.GetMinTime(), config.GetMaxTime()) * HOUR;
+        auctionEntry->AddItem(item);
 
         item->SaveToDB(trans);
-        sAuctionMgr->AddAItem(item);
         auctionHouse->AddAuction(auctionEntry);
         auctionEntry->SaveToDB(trans);
-
-        auctionHouse->AddAuction(auctionEntry);
 
         ++count;
     }

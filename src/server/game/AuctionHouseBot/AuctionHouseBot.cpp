@@ -486,9 +486,9 @@ void AuctionHouseBot::PrepareStatusInfos(AuctionHouseBotStatusInfo& statusInfo)
         for (AuctionHouseObject::AuctionEntryMap::const_iterator itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
         {
             AuctionEntry* auctionEntry = itr->second;
-            if (Item* item = sAuctionMgr->GetAItem(auctionEntry->itemGUIDLow))
+            if (auctionEntry->item)
             {
-                ItemTemplate const* prototype = item->GetTemplate();
+                ItemTemplate const* prototype = auctionEntry->item->GetTemplate();
                 if (!auctionEntry->owner || sAuctionBotConfig->IsBotChar(auctionEntry->owner)) // Add only ahbot items
                 {
                     if (prototype->Quality < MAX_AUCTION_QUALITY)
