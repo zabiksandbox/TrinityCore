@@ -246,7 +246,7 @@ void AuctionHouseMgr::SendAuctionWonMail(AuctionEntry* auction, SQLTransaction& 
     else
     {
         // bidder doesn't exist, delete the item
-        auction->RemoveItem();
+        auction->RemoveItem(true);
     }
 }
 
@@ -314,7 +314,7 @@ void AuctionHouseMgr::SendAuctionExpiredMail(AuctionEntry* auction, SQLTransacti
     else
     {
         // owner doesn't exist, delete the item
-        auction->RemoveItem();
+        auction->RemoveItem(true);
     }
 }
 
@@ -643,7 +643,7 @@ bool AuctionHouseObject::RemoveAuction(AuctionEntry* auction)
     sScriptMgr->OnAuctionRemove(this, auction);
 
     // we need to delete the entry, it is not referenced any more
-    auction->RemoveItem();
+    auction->RemoveItem(true);
 
     delete auction;
     return wasInMap;
@@ -691,7 +691,6 @@ void AuctionHouseObject::Update()
         ///- In any case clear the auction
         auction->DeleteFromDB(trans);
 
-        auction->RemoveItem();
         RemoveAuction(auction);
     }
 
@@ -832,13 +831,16 @@ bool AuctionEntry::AddItem(Item* itemObj)
     item = itemObj;
     return true;
 }
-bool AuctionEntry::RemoveItem()
+bool AuctionEntry::RemoveItem(bool deleteItem /* = false */)
 {
     if (!item)
         return false;
 
     if (!sAuctionMgr->RemoveAuctionItem(item))
         return false;
+
+    if (deleteItem)
+        delete item;
 
     item = nullptr;
     return true;

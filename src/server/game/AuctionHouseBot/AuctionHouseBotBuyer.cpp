@@ -406,8 +406,7 @@ void AuctionBotBuyer::BuyEntry(AuctionEntry* auction, AuctionHouseObject* auctio
     // Delete auction from DB
     auction->DeleteFromDB(trans);
 
-    // Remove auction item and auction from memory
-    auction->RemoveItem();
+    // Remove auction from memory
     auctionHouse->RemoveAuction(auction);
 
     // Run SQLs

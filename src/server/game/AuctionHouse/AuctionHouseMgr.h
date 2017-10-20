@@ -75,16 +75,18 @@ enum AuctionHouses
 
 enum AuctionSortOrder
 {
-    AUCTION_SORT_MINLEVEL = 0,
-    AUCTION_SORT_RARITY = 1,
-    AUCTION_SORT_BUYOUT = 2,
-    AUCTION_SORT_TIMELEFT = 3,
-    AUCTION_SORT_UNK4 = 4,
-    AUCTION_SORT_ITEM = 5,
-    AUCTION_SORT_MINBIDBUY = 6,
-    AUCTION_SORT_OWNER = 7,
-    AUCTION_SORT_BID = 8,
-    AUCTION_SORT_STACK = 9
+    AUCTION_SORT_MINLEVEL   = 0,
+    AUCTION_SORT_RARITY     = 1,
+    AUCTION_SORT_BUYOUT     = 2,
+    AUCTION_SORT_TIMELEFT   = 3,
+    AUCTION_SORT_UNK4       = 4,
+    AUCTION_SORT_ITEM       = 5,
+    AUCTION_SORT_MINBIDBUY  = 6,
+    AUCTION_SORT_OWNER      = 7,
+    AUCTION_SORT_BID        = 8,
+    AUCTION_SORT_STACK      = 9,
+    AUCTION_SORT_BUYOUT_2   = 10,
+    AUCTION_SORT_MAX        = 11
 };
 
 struct AuctionSortInfo
@@ -126,7 +128,7 @@ struct TC_GAME_API AuctionEntry
     static std::string BuildAuctionMailBody(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut);
     static std::string BuildAuctionMailBodyWithTime(ObjectGuid::LowType lowGuid, uint32 bid, uint32 buyout, uint32 deposit, uint32 cut, tm& time);
     bool AddItem(Item* item);
-    bool RemoveItem();
+    bool RemoveItem(bool deleteItem = false);
 };
 
 //this class is used as auctionhouse instance

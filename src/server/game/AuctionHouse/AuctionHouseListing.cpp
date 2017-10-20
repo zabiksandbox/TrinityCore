@@ -123,6 +123,7 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
                 else
                     return (left->bid > right->bid);
             case AUCTION_SORT_BUYOUT:
+            case AUCTION_SORT_BUYOUT_2:
                 if (left->buyout == right->buyout)
                     continue;
                 if (!thisOrder.isDesc)
@@ -557,13 +558,18 @@ bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHou
         }
     }
 
-    // Partial sort to improve performance a bit, but the last pages will burn
-    if (listfrom + 50 <= auctionShortlist.size())
-        std::partial_sort(auctionShortlist.begin(),
-            auctionShortlist.begin() + listfrom + 50, auctionShortlist.end(),
-            std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
-    else
-        std::sort(auctionShortlist.begin(), auctionShortlist.end(), std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
+    // Check if first sort column is valid, if not don't sort
+    if (sortorder.size() > 0 && sortorder.begin()->sortOrder >= AUCTION_SORT_MINLEVEL &&
+        sortorder.begin()->sortOrder < AUCTION_SORT_MAX && sortorder.begin()->sortOrder != AUCTION_SORT_UNK4)
+    {
+        // Partial sort to improve performance a bit, but the last pages will burn
+        if (listfrom + 50 <= auctionShortlist.size())
+            std::partial_sort(auctionShortlist.begin(),
+                auctionShortlist.begin() + listfrom + 50, auctionShortlist.end(),
+                std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
+        else
+            std::sort(auctionShortlist.begin(), auctionShortlist.end(), std::bind(SortAuction, std::placeholders::_1, std::placeholders::_2, sortorder, player));
+    }
 
     for (auto auction : auctionShortlist)
     {

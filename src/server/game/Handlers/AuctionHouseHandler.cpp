@@ -544,7 +544,6 @@ void WorldSession::HandleAuctionPlaceBid(WorldPacket& recvData)
 
         auction->DeleteFromDB(trans);
 
-        auction->RemoveItem();
         auctionHouse->RemoveAuction(auction);
     }
     player->SaveInventoryAndGoldToDB(trans);
@@ -622,7 +621,6 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recvData)
     auction->DeleteFromDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
-    auction->RemoveItem();
     auctionHouse->RemoveAuction(auction);
 }
 
@@ -741,6 +739,9 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recvData)
                 break;
             case AUCTION_SORT_STACK:
                 TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_STACK (%s)", orderNum, orderMode.c_str());
+                break;
+            case AUCTION_SORT_BUYOUT_2:
+                TC_LOG_DEBUG("misc", "Level %u - SortOrder: AUCTION_SORT_BUYOUT_2 (%s)", orderNum, orderMode.c_str());
                 break;
             default:
                 TC_LOG_WARN("misc", "Level %u - Unknown Sort Order %u (%s)", orderNum, static_cast<uint8>(sortInfo.sortOrder), orderMode.c_str());
