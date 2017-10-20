@@ -33,7 +33,7 @@ std::list<AuctionListingEvent*> AuctionHouseListing::_requestsNew;
 std::list<AuctionListingEvent*> AuctionHouseListing::_requests;
 
 std::mutex AuctionHouseListing::_listingLock;
-std::atomic<bool> AuctionHouseListing::_auctionHouseListingAllowed = false;
+std::atomic<bool> AuctionHouseListing::_auctionHouseListingAllowed(false);
 
 namespace
 {
