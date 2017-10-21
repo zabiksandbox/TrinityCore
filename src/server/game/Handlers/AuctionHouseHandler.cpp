@@ -311,8 +311,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         AH->etime = etime;
         AH->auctionHouseEntry = auctionHouseEntry;
         AH->item = nullptr;
-        AH->itemName = nullptr;
-        AH->ownerName = nullptr;
         AH->AddItem(item);
 
         TC_LOG_INFO("network", "CMSG_AUCTION_SELL_ITEM: Player %s (guid %d) is selling item %s entry %u (guid %d) with count %u with initial bid %u with buyout %u and with time %u (in sec) in auctionhouse %u",
@@ -369,8 +367,6 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recvData)
         AH->etime = etime;
         AH->auctionHouseEntry = auctionHouseEntry;
         AH->item = nullptr;
-        AH->itemName = nullptr;
-        AH->ownerName = nullptr;
         AH->AddItem(newItem);
 
         TC_LOG_INFO("network", "CMSG_AUCTION_SELL_ITEM: Player %s (guid %d) is selling item %s entry %u (guid %d) with count %u with initial bid %u with buyout %u and with time %u (in sec) in auctionhouse %u",

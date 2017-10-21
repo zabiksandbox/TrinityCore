@@ -19,12 +19,14 @@
 #ifndef _AUCTION_HOUSE_MGR_H
 #define _AUCTION_HOUSE_MGR_H
 
+#include "Common.h"
 #include "Define.h"
 #include "DatabaseEnvFwd.h"
 #include "ObjectGuid.h"
 #include <map>
 #include <set>
 #include <unordered_map>
+#include "Guild.h"
 
 class Item;
 class Player;
@@ -113,13 +115,16 @@ struct TC_GAME_API AuctionEntry
 
     // Used just for sorting
     uint32 quality;
-    char* itemName;
-    char* ownerName;
+    std::string itemName[TOTAL_LOCALES];
+    std::string ownerName;
 
     // helpers
     uint8 GetHouseId() const { return houseId; }
     uint32 GetAuctionCut() const;
     uint32 GetAuctionOutBid() const;
+    std::string GetItemName(LocaleConstant locale) const { return locale < TOTAL_LOCALES ? itemName[locale] : itemName[LOCALE_enUS]; }
+    bool SetItemNames();
+    bool SetOwnerName();
     bool BuildAuctionInfo(WorldPacket & data) const;
     void DeleteFromDB(SQLTransaction& trans) const;
     void SaveToDB(SQLTransaction& trans) const;

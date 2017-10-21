@@ -43,72 +43,6 @@ enum eAuctionHouse
     AH_MINIMUM_DEPOSIT = 100
 };
 
-static std::string GetItemName(Player const* player, AuctionEntry const* auction, Item const* item = nullptr)
-{
-    LocaleConstant localeConstant;
-    if (player)
-        localeConstant = player->GetSession()->GetSessionDbLocaleIndex();
-
-    // Performance only if we have player, auction and locale is enUS. Else we go slower route
-    if (auction && player && localeConstant == LOCALE_enUS && auction->itemName != nullptr)
-        return std::string(auction->itemName);
-
-    if (!item)
-        return "";
-
-    int locdbc_idx = LOCALE_enUS;
-    if (player)
-        locdbc_idx = player->GetSession()->GetSessionDbcLocale();
-    ItemTemplate const* proto = item->GetTemplate();
-
-    if (proto->Name1.empty())
-        return proto->Name1;
-
-    std::string name = proto->Name1;
-
-    // local name
-    if (player && localeConstant != LOCALE_enUS)
-        if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
-            ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
-
-    // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
-    //  that matches the search but it may not equal item->GetItemRandomPropertyId()
-    //  used in BuildAuctionInfo() which then causes wrong items to be listed
-    int32 propRefID = item->GetItemRandomPropertyId();
-
-    if (propRefID)
-    {
-        // Append the suffix to the name (ie: of the Monkey) if one exists
-        // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
-        //  even though the DBC names seem misleading
-
-        char* const* suffix = nullptr;
-
-        if (propRefID < 0)
-        {
-            ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
-            if (itemRandSuffix)
-                suffix = itemRandSuffix->nameSuffix;
-        }
-        else
-        {
-            ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
-            if (itemRandProp)
-                suffix = itemRandProp->nameSuffix;
-        }
-
-        // dbc local name
-        if (suffix)
-        {
-            // Append the suffix (ie: of the Monkey) to the name using localization
-            // or default enUS if localization is invalid
-            name += ' ';
-            name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
-        }
-    }
-    return name;
-}
-
 AuctionHouseMgr::AuctionHouseMgr() { }
 
 AuctionHouseMgr* AuctionHouseMgr::instance()
@@ -376,7 +310,6 @@ void AuctionHouseMgr::LoadAuctionItems()
 
     uint32 count = 0;
 
-    std::unordered_set<Item*> itemRemoveList;
     do
     {
         Field* fields = result->Fetch();
@@ -406,9 +339,8 @@ void AuctionHouseMgr::LoadAuctionItems()
                 auction->AddItem(item);
                 if (auction->item)
                 {
-                    std::string itemName = GetItemName(nullptr, nullptr, auction->item).c_str();
-                    auction->itemName = itemName.empty() ? nullptr : strdup(itemName.c_str());
-                    itemRemoveList.erase(item);
+                    auction->SetItemNames();
+                    auction->SetOwnerName();
                     ++count;
                 }
             }
@@ -621,11 +553,8 @@ AuctionHouseEntry const* AuctionHouseMgr::GetAuctionHouseEntryFromHouse(uint8 ho
 AuctionHouseObject::~AuctionHouseObject()
 {
     for (AuctionEntryMap::iterator itr = AuctionsMap.begin(); itr != AuctionsMap.end(); ++itr)
-    {
-        if (itr->second->itemName)
-            free (itr->second->itemName);
         delete itr->second;
-    }
+    AuctionsMap.clear();
 }
 
 void AuctionHouseObject::AddAuction(AuctionEntry* auction)
@@ -633,7 +562,7 @@ void AuctionHouseObject::AddAuction(AuctionEntry* auction)
     ASSERT(auction);
 
     if (auction->item)
-        auction->itemName = strdup(GetItemName(nullptr, nullptr, auction->item).c_str());
+        auction->SetItemNames();
 
     AuctionsMap[auction->Id] = auction;
     sScriptMgr->OnAuctionAdd(this, auction);
@@ -784,8 +713,6 @@ bool AuctionEntry::LoadFromDB(Field* fields)
     startbid = fields[10].GetUInt32();
     deposit = fields[11].GetUInt32();
     item = nullptr;
-    itemName = nullptr;
-    ownerName = nullptr;
     auctionHouseEntry = AuctionHouseMgr::GetAuctionHouseEntryFromHouse(houseId);
     if (!auctionHouseEntry)
     {
@@ -852,5 +779,73 @@ bool AuctionEntry::RemoveItem(bool deleteObj /* = false */, bool deleteDb /* = f
     }
 
     item = nullptr;
+    return true;
+}
+
+bool AuctionEntry::SetOwnerName()
+{
+    sCharacterCache->GetCharacterNameByGuid(ObjectGuid(HighGuid::Player, owner), ownerName);
+    return true;
+}
+
+bool AuctionEntry::SetItemNames()
+{
+    if (!item)
+        return false;
+
+    for (uint8 currentLocale = 0; currentLocale < TOTAL_LOCALES; ++currentLocale)
+    {
+        LocaleConstant locdbc_idx = sWorld->GetAvailableDbcLocale(static_cast<LocaleConstant>(currentLocale));
+        ItemTemplate const* proto = item->GetTemplate();
+
+        if (proto->Name1.empty())
+        {
+            itemName[currentLocale] = proto->Name1;
+            return true;
+        }
+
+        itemName[currentLocale] = proto->Name1;
+
+        // local name
+        if (locdbc_idx != LOCALE_enUS)
+            if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
+                ObjectMgr::GetLocaleString(il->Name, locdbc_idx, itemName[currentLocale]);
+
+        // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
+        //  that matches the search but it may not equal item->GetItemRandomPropertyId()
+        //  used in BuildAuctionInfo() which then causes wrong items to be listed
+        int32 propRefID = item->GetItemRandomPropertyId();
+
+        if (propRefID)
+        {
+            // Append the suffix to the name (ie: of the Monkey) if one exists
+            // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
+            //  even though the DBC names seem misleading
+
+            char* const* suffix = nullptr;
+
+            if (propRefID < 0)
+            {
+                ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
+                if (itemRandSuffix)
+                    suffix = itemRandSuffix->nameSuffix;
+            }
+            else
+            {
+                ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
+                if (itemRandProp)
+                    suffix = itemRandProp->nameSuffix;
+            }
+
+            // dbc local name
+            if (suffix)
+            {
+                // Append the suffix (ie: of the Monkey) to the name using localization
+                // or default enUS if localization is invalid
+                itemName[currentLocale] += ' ';
+                itemName[currentLocale] += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
+            }
+        }
+    }
     return true;
 }

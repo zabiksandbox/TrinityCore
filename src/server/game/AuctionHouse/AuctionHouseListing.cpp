@@ -42,72 +42,6 @@ namespace
     std::unordered_map<ObjectGuid, time_t> _getAllThrottleMap;
 }
 
-static std::string GetItemName(Player const* player, AuctionEntry const* auction, Item const* item = nullptr)
-{
-    LocaleConstant localeConstant;
-    if (player)
-        localeConstant = player->GetSession()->GetSessionDbLocaleIndex();
-
-    // Performance only if we have player, auction and locale is enUS. Else we go slower route
-    if (auction && player && localeConstant == LOCALE_enUS && auction->itemName != nullptr)
-        return std::string(auction->itemName);
-
-    if (!item)
-        return "";
-
-    int locdbc_idx = LOCALE_enUS;
-    if (player)
-        locdbc_idx = player->GetSession()->GetSessionDbcLocale();
-    ItemTemplate const* proto = item->GetTemplate();
-
-    if (proto->Name1.empty())
-        return proto->Name1;
-
-    std::string name = proto->Name1;
-
-    // local name
-    if (player && localeConstant != LOCALE_enUS)
-        if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
-            ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
-
-    // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
-    //  that matches the search but it may not equal item->GetItemRandomPropertyId()
-    //  used in BuildAuctionInfo() which then causes wrong items to be listed
-    int32 propRefID = item->GetItemRandomPropertyId();
-
-    if (propRefID)
-    {
-        // Append the suffix to the name (ie: of the Monkey) if one exists
-        // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
-        //  even though the DBC names seem misleading
-
-        char* const* suffix = nullptr;
-
-        if (propRefID < 0)
-        {
-            ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
-            if (itemRandSuffix)
-                suffix = itemRandSuffix->nameSuffix;
-        }
-        else
-        {
-            ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
-            if (itemRandProp)
-                suffix = itemRandProp->nameSuffix;
-        }
-
-        // dbc local name
-        if (suffix)
-        {
-            // Append the suffix (ie: of the Monkey) to the name using localization
-            // or default enUS if localization is invalid
-            name += ' ';
-            name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
-        }
-    }
-    return name.c_str();
-}
-
 // Proof of concept, we should shift the info we're obtaining in here into AuctionEntry probably
 static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrderVector& sortOrder, Player* player)
 {
@@ -132,9 +66,10 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
                     return (left->buyout > right->buyout);
             case AUCTION_SORT_ITEM:
             {
-                std::string nameLeft = GetItemName(player, left);
-                std::string nameRight = GetItemName(player, right);
-                int result = nameLeft.compare(nameRight);
+                LocaleConstant locale = LOCALE_enUS;
+                if (player && player->GetSession())
+                    locale = player->GetSession()->GetSessionDbLocaleIndex();
+                int result = left->itemName[locale].compare(right->itemName[locale]);
 
                 if (result == 0)
                     continue;
@@ -155,18 +90,23 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
             }
             case AUCTION_SORT_OWNER:
             {
-                std::string leftName = "";
-                std::string rightName = "";
-                sCharacterCache->GetCharacterNameByGuid(ObjectGuid(HighGuid::Player, left->owner), leftName);
-                sCharacterCache->GetCharacterNameByGuid(ObjectGuid(HighGuid::Player, right->owner), rightName);
-                int result = leftName.compare(rightName);
+                int result = left->ownerName.compare(right->ownerName);
+
                 if (result == 0)
                     continue;
 
                 return thisOrder.isDesc ? result > 0 : result < 0;
             }
             case AUCTION_SORT_RARITY:
+            {
+                ItemTemplate const* protoLeft = left->item->GetTemplate();
+                ItemTemplate const* protoRight = right->item->GetTemplate();
+                if (protoLeft->Quality == protoRight->Quality)
+                    continue;
+
+                return thisOrder.isDesc ? protoLeft->Quality > protoRight->Quality : protoLeft->Quality < protoRight->Quality;
                 break;
+            }
             case AUCTION_SORT_STACK:
                 if (left->itemCount == right->itemCount)
                     continue;
