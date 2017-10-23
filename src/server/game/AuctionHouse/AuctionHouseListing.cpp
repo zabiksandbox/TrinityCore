@@ -52,18 +52,14 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
             case AUCTION_SORT_BID:
                 if (left->bid == right->bid)
                     continue;
-                if (!thisOrder.isDesc)
-                    return (left->bid < right->bid);
-                else
-                    return (left->bid > right->bid);
+
+                return thisOrder.isDesc ? left->bid > right->bid : left->bid < right->bid;
             case AUCTION_SORT_BUYOUT:
             case AUCTION_SORT_BUYOUT_2:
                 if (left->buyout == right->buyout)
                     continue;
-                if (!thisOrder.isDesc)
-                    return (left->buyout < right->buyout);
-                else
-                    return (left->buyout > right->buyout);
+
+                return thisOrder.isDesc ? left->buyout > right->buyout : left->buyout < right->buyout;
             case AUCTION_SORT_ITEM:
             {
                 LocaleConstant locale = LOCALE_enUS;
@@ -83,10 +79,7 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
                 if (protoLeft->RequiredLevel == protoRight->RequiredLevel)
                     continue;
 
-                if (!thisOrder.isDesc)
-                    return (protoLeft->RequiredLevel < protoRight->RequiredLevel);
-                else
-                    return (protoLeft->RequiredLevel > protoRight->RequiredLevel);
+                return thisOrder.isDesc ? protoLeft->RequiredLevel > protoRight->RequiredLevel : protoLeft->RequiredLevel < protoRight->RequiredLevel;
             }
             case AUCTION_SORT_OWNER:
             {
@@ -105,7 +98,6 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
                     continue;
 
                 return thisOrder.isDesc ? protoLeft->Quality > protoRight->Quality : protoLeft->Quality < protoRight->Quality;
-                break;
             }
             case AUCTION_SORT_STACK:
                 if (left->itemCount == right->itemCount)
@@ -114,17 +106,16 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
                     return (left->itemCount < right->itemCount);
                 else
                     return (left->itemCount > right->itemCount);
-                break;
             case AUCTION_SORT_TIMELEFT:
                 if (left->expire_time == right->expire_time)
                     continue;
-                if (!thisOrder.isDesc)
-                    return (left->expire_time < right->expire_time);
-                else
-                    return (left->expire_time > right->expire_time);
-            case AUCTION_SORT_UNK4:
-                break;
+
+                return thisOrder.isDesc ? left->expire_time > right->expire_time : left->expire_time < right->expire_time;
             case AUCTION_SORT_MINBIDBUY:
+                // Not quite sure how to do this one yet
+                break;
+            case AUCTION_SORT_UNK4:
+            default:
                 break;
         }
     }
@@ -454,44 +445,8 @@ bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHou
                     if (ItemLocale const* il = sObjectMgr->GetItemLocale(proto->ItemId))
                         ObjectMgr::GetLocaleString(il->Name, localeConstant, name);
 
-                // DO NOT use GetItemEnchantMod(proto->RandomProperty) as it may return a result
-                //  that matches the search but it may not equal item->GetItemRandomPropertyId()
-                //  used in BuildAuctionInfo() which then causes wrong items to be listed
-                int32 propRefID = auction->item->GetItemRandomPropertyId();
-
-                if (propRefID)
-                {
-                    // Append the suffix to the name (ie: of the Monkey) if one exists
-                    // These are found in ItemRandomSuffix.dbc and ItemRandomProperties.dbc
-                    //  even though the DBC names seem misleading
-
-                    char* const* suffix = nullptr;
-
-                    if (propRefID < 0)
-                    {
-                        ItemRandomSuffixEntry const* itemRandSuffix = sItemRandomSuffixStore.LookupEntry(-propRefID);
-                        if (itemRandSuffix)
-                            suffix = itemRandSuffix->nameSuffix;
-                    }
-                    else
-                    {
-                        ItemRandomPropertiesEntry const* itemRandProp = sItemRandomPropertiesStore.LookupEntry(propRefID);
-                        if (itemRandProp)
-                            suffix = itemRandProp->nameSuffix;
-                    }
-
-                    // dbc local name
-                    if (suffix)
-                    {
-                        // Append the suffix (ie: of the Monkey) to the name using localization
-                        // or default enUS if localization is invalid
-                        name += ' ';
-                        name += suffix[locdbc_idx >= 0 ? locdbc_idx : LOCALE_enUS];
-                    }
-                }
-
                 // Perform the search (with or without suffix)
-                if (!Utf8FitTo(name, wsearchedname))
+                if (!Utf8FitTo(auction->itemName[localeConstant], wsearchedname))
                     continue;
             }
             auctionShortlist.push_back(auction);

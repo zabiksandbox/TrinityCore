@@ -88,7 +88,7 @@ enum AuctionSortOrder
     AUCTION_SORT_BID        = 8,
     AUCTION_SORT_STACK      = 9,
     AUCTION_SORT_BUYOUT_2   = 10,
-    AUCTION_SORT_MAX        = 11
+    AUCTION_SORT_MAX
 };
 
 struct AuctionSortInfo
