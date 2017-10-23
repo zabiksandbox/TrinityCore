@@ -28,9 +28,11 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "World.h"
+#include "Config.h"
 
 std::list<AuctionListingEvent*> AuctionHouseListing::_requestsNew;
 std::list<AuctionListingEvent*> AuctionHouseListing::_requests;
+std::list<int> AuctionHouseListing::_delayList;
 
 std::mutex AuctionHouseListing::_listingLock;
 std::atomic<bool> AuctionHouseListing::_auctionHouseListingAllowed(false);
@@ -114,6 +116,8 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
             case AUCTION_SORT_MINBIDBUY:
                 // Not quite sure how to do this one yet
                 break;
+            case AUCTION_SORT_MAX:
+                // Such sad travis appeasement
             case AUCTION_SORT_UNK4:
             default:
                 break;
@@ -125,26 +129,55 @@ static bool SortAuction(AuctionEntry* left, AuctionEntry* right, AuctionSortOrde
 void AuctionHouseListing::Update()
 {
     if (!IsListingAllowed())
+    {
+        TC_LOG_DEBUG("auctionHouse", "Auction listing blocked with %u requests present and %u new requests", _requests.size(), _requestsNew.size());
         return;
+    }
 
     {
         std::unique_lock<std::mutex> lock(_listingLock);
 
+        uint32 startTime = getMSTime();
         // process new requests
         if (!_requestsNew.empty())
             _requests.splice(_requests.end(), _requestsNew);
 
+        uint32 thisDelay = 0;
+        for (uint32 delay : _delayList)
+            thisDelay += delay;
+
+        thisDelay = static_cast<int>(static_cast<float>(thisDelay) * sWorld->getFloatConfig(CONFIG_AUCTION_DYNAMIC_DELAY));
+
+        thisDelay = _delayList.size() == 0 ? 0 : std::max
+            (thisDelay / static_cast<uint32>(_delayList.size()), sWorld->getIntConfig(CONFIG_AUCTION_SEARCH_DELAY));
+
+        if (thisDelay > sWorld->getIntConfig(CONFIG_AUCTION_SEARCH_DELAY))
+            TC_LOG_DEBUG("auctionHouse", "Using %u as search delay", thisDelay);
+
+        TC_LOG_TRACE("auctionHouse", "AHLIST: Started at %u with %u requests", startTime, _requests.size());
         for (auto itr = _requests.begin(); itr != _requests.end();)
         {
-            if ((*itr)->Execute())
+            if ((*itr)->Execute(thisDelay))
             {
                 delete (*itr);
                 itr = _requests.erase(itr);
-                break;
             }
             else
                 ++itr;
+
+            // main thread may be waiting for us
+            if (!IsListingAllowed())
+                break;
         }
+        uint32 endTime = getMSTime();
+
+        // Update average delay info
+        _delayList.push_back(endTime - startTime);
+        while (_delayList.size() > sWorld->getIntConfig(CONFIG_AUCTION_DYNAMIC_AVERAGE))
+            _delayList.pop_front();
+
+        TC_LOG_TRACE("auctionHouse", "AHLIST: Finished at %u after %u ms", endTime , endTime - startTime);
+
     }
 }
 
@@ -154,7 +187,7 @@ void AuctionHouseListing::AuctionHouseListingHandler(boost::asio::deadline_timer
     {
         Update();
 
-        updateAuctionTimer->expires_from_now(boost::posix_time::seconds(1));
+        updateAuctionTimer->expires_from_now(boost::posix_time::milliseconds(sWorld->getIntConfig(CONFIG_AUCTION_UPDATE_DELAY)));
         updateAuctionTimer->async_wait(std::bind(&AuctionHouseListingHandler, updateAuctionTimer, std::placeholders::_1));
     }
 }
@@ -226,7 +259,7 @@ bool AuctionListingEvent::ExecuteBase(Player* player)
     return true;
 }
 
-bool AuctionListOwnItemsEvent::Execute()
+bool AuctionListOwnItemsEvent::Execute(uint32 /*searchDelay*/)
 {
     Player* player = ObjectAccessor::FindPlayer(_playerGuid);
     if (!AuctionListingEvent::ExecuteBase(player))
@@ -258,7 +291,7 @@ bool AuctionListOwnItemsEvent::Execute()
     return true;
 }
 
-bool AuctionListItemsEvent::Execute()
+bool AuctionListItemsEvent::Execute(uint32 searchDelay)
 {
     Player* player = ObjectAccessor::FindPlayer(_playerGuid);
     if (!AuctionListingEvent::ExecuteBase(player))
@@ -288,13 +321,13 @@ bool AuctionListItemsEvent::Execute()
 
     listingData.put<uint32>(0, count);
     listingData << (uint32)totalCount;
-    listingData << (uint32)sWorld->getIntConfig(CONFIG_AUCTION_SEARCH_DELAY);
+    listingData << searchDelay;
     player->SendDirectMessage(&listingData);
 
     return true;
 }
 
-bool AuctionListBidsEvent::Execute()
+bool AuctionListBidsEvent::Execute(uint32 /*searchDelay*/)
 {
     Player* player = ObjectAccessor::FindPlayer(_playerGuid);
     if (!AuctionListingEvent::ExecuteBase(player))
@@ -453,8 +486,8 @@ bool AuctionListItemsEvent::BuildListAuctionItems(AuctionHouseObject* auctionHou
         }
     }
 
-    // Check if first sort column is valid, if not don't sort
-    if (sortorder.size() > 0 && sortorder.begin()->sortOrder >= AUCTION_SORT_MINLEVEL &&
+    // Check if sort enabled, and first sort column is valid, if not don't sort
+    if (sWorld->getBoolConfig(CONFIG_AUCTION_LIST_SORT) && sortorder.size() > 0 && sortorder.begin()->sortOrder >= AUCTION_SORT_MINLEVEL &&
         sortorder.begin()->sortOrder < AUCTION_SORT_MAX && sortorder.begin()->sortOrder != AUCTION_SORT_UNK4)
     {
         // Partial sort to improve performance a bit, but the last pages will burn

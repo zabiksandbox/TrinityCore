@@ -334,7 +334,7 @@ extern int main(int argc, char** argv)
 
     // start auction house listing thread
     boost::asio::deadline_timer updateAuctionTimer(*ioService);
-    updateAuctionTimer.expires_from_now(boost::posix_time::seconds(1));
+    updateAuctionTimer.expires_from_now(boost::posix_time::milliseconds(sWorld->getIntConfig(CONFIG_AUCTION_UPDATE_DELAY)));
     updateAuctionTimer.async_wait(std::bind(&AuctionHouseListing::AuctionHouseListingHandler, &updateAuctionTimer, std::placeholders::_1));
 
     WorldUpdateLoop();

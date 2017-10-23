@@ -9,6 +9,7 @@
 #    EXAMPLE CONFIG
 #    CONNECTIONS AND DIRECTORIES
 #    PERFORMANCE SETTINGS
+#    AUCTION HOUSE SETTINGS
 #    SERVER LOGGING
 #    SERVER SETTINGS
 #    UPDATE SETTINGS
@@ -498,6 +499,11 @@ CleanCharacterDB = 0
 PersistentCharacterCleanFlags = 0
 
 #
+###################################################################################################
+
+###################################################################################################
+# AUCTION HOUSE SETTINGS
+#
 #    Auction.GetAllScanDelay
 #        Description: Sets the minimum time in seconds, a single player character can perform a getall scan.
 #                     The value is only held in memory so a server restart will clear it.
@@ -514,6 +520,42 @@ Auction.GetAllScanDelay = 900
 #        Default:     300 - (Time delay between auction searches set to 0.3secs)
 
 Auction.SearchDelay = 300
+
+#
+#    Auction.EnableSort
+#        Description: Enables or disabled sorting of auctions. Note this can cause performance problems when there are
+#                     many items, or many simultaenous searches, especially on the higher pages.
+#        Default:     1 - (Enabled - Auctions will be sorted server side)
+#                     0 - (Disabed - Auctions will not be sorted server side)
+
+Auction.EnableSort = 1
+
+#
+#    Auction.ListUpdateDelay
+#        Description: Specifies the time between auction list scan updates. More often (lower number) will mean that
+#                     auction requests are handled for regularly at the cost of load.
+#        Default:     100 - (100ms, 10 times per second)
+
+Auction.ListUpdateDelay = 100
+
+#
+#    Auction.DynamicDelayFactor
+#        Description: Specifies the ratio of time spent in the auction list process (averaged over 10 updates)
+#                     and the time sent to the client as Search Delay (if this is more than the default set above).
+#                     Any searches made will have this new delay sent in an attempt to reduce load from auto searchers.
+#        Default:     1 - (1:1 radio. 10ms delay = 10ms search penalty)
+#                     0 - (Dynamic delay disabled)
+#                     0.5 - (10ms delay = 5ms search penalty)
+
+Auction.DynamicDelayFactor = 1
+
+#
+#    Auction.DynamicDelayAverage
+#        Description: Specifies the number of updates included in the average calculation used in the DynamicDelayFactor
+#                     calculation. This should be enough to get a decent short term view of load.
+#        Default:     50 - (Equates to one second if the ListUpdateDelay is 100.
+
+Auction.DynamicDelayAverage = 50
 
 #
 ###################################################################################################

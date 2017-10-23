@@ -338,11 +338,7 @@ void AuctionHouseMgr::LoadAuctionItems()
 
                 auction->AddItem(item);
                 if (auction->item)
-                {
-                    auction->SetItemNames();
-                    auction->SetOwnerName();
                     ++count;
-                }
             }
         }
     }
@@ -564,6 +560,8 @@ void AuctionHouseObject::AddAuction(AuctionEntry* auction)
     if (auction->item)
         auction->SetItemNames();
 
+    auction->SetOwnerName();
+
     AuctionsMap[auction->Id] = auction;
     sScriptMgr->OnAuctionAdd(this, auction);
 }
@@ -759,6 +757,10 @@ bool AuctionEntry::AddItem(Item* itemObj)
     if (!sAuctionMgr->AddAuctionItem(this, itemObj))
         return false;
     item = itemObj;
+
+    if (item)
+        SetItemNames();
+
     return true;
 }
 bool AuctionEntry::RemoveItem(bool deleteObj /* = false */, bool deleteDb /* = false */, SQLTransaction* trans /* = nullptr */)

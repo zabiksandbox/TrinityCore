@@ -660,6 +660,10 @@ void World::LoadConfigSettings(bool reload)
         TC_LOG_ERROR("server.loading", "Auction.SearchDelay (%i) must be between 100 and 10000. Using default of 300ms", m_int_configs[CONFIG_AUCTION_SEARCH_DELAY]);
         m_int_configs[CONFIG_AUCTION_SEARCH_DELAY] = 300;
     }
+    m_bool_configs[CONFIG_AUCTION_LIST_SORT] = sConfigMgr->GetBoolDefault("Auction.EnableSort", true);
+    m_int_configs[CONFIG_AUCTION_UPDATE_DELAY] = sConfigMgr->GetIntDefault("Auction.ListUpdateDelay", 100);
+    m_int_configs[CONFIG_AUCTION_DYNAMIC_AVERAGE] = sConfigMgr->GetIntDefault("Auction.DynamicDelayAverage", 50);
+    m_float_configs[CONFIG_AUCTION_DYNAMIC_DELAY] = sConfigMgr->GetFloatDefault("Auction.DynamicDelayFactor", 1.f);
     m_int_configs[CONFIG_CHAT_CHANNEL_LEVEL_REQ] = sConfigMgr->GetIntDefault("ChatLevelReq.Channel", 1);
     m_int_configs[CONFIG_CHAT_WHISPER_LEVEL_REQ] = sConfigMgr->GetIntDefault("ChatLevelReq.Whisper", 1);
     m_int_configs[CONFIG_CHAT_EMOTE_LEVEL_REQ] = sConfigMgr->GetIntDefault("ChatLevelReq.Emote", 1);

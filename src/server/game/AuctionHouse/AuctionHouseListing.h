@@ -55,7 +55,7 @@ class AuctionListingEvent
     public:
         AuctionListingEvent(Player* player, uint32 faction);
         virtual ~AuctionListingEvent();
-        virtual bool Execute() = 0;
+        virtual bool Execute(uint32 searchDelay) = 0;
 
         bool ExecuteBase(Player* player);
 
@@ -70,14 +70,14 @@ class AuctionListOwnItemsEvent : public AuctionListingEvent
 {
     public:
         AuctionListOwnItemsEvent(Player* player, uint32 faction);
-        bool Execute() override;
+        bool Execute(uint32 searchDelay) override;
 };
 
 class AuctionListItemsEvent : public AuctionListingEvent
 {
     public:
         AuctionListItemsEvent(Player* player, uint32 faction, std::string const& searchedname, uint32 listfrom, uint8 levelmin, uint8 levelmax, uint8 usable, uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality, AuctionSortOrderVector sortOrder, uint8 getAll);
-        bool Execute() override;
+        bool Execute(uint32 searchDelay) override;
 
     private:
         bool BuildListAuctionItems(AuctionHouseObject* auctionHouse, WorldPacket& data, Player* player,
@@ -118,7 +118,7 @@ class AuctionListBidsEvent : public AuctionListingEvent
 {
     public:
         AuctionListBidsEvent(Player* player, uint32 faction, WorldPacket& data);
-        bool Execute() override;
+        bool Execute(uint32 searchDelay) override;
 
     private:
         WorldPacket _data;
@@ -143,6 +143,7 @@ class TC_GAME_API AuctionHouseListing
 
         static std::list<AuctionListingEvent*> _requestsNew;
         static std::list<AuctionListingEvent*> _requests;
+        static std::list<int> _delayList;
 
         static std::mutex _listingLock;
         static std::atomic<bool> _auctionHouseListingAllowed;
