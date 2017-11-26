@@ -818,6 +818,7 @@ INSERT INTO `rbac_linked_permissions` VALUES
 (196,866),
 (196,867),
 (196,870),
+(196,871),
 (197,232),
 (197,236),
 (197,237),
@@ -1709,7 +1710,8 @@ INSERT INTO `rbac_permissions` VALUES
 (865,'Command: npc showloot'),
 (866,'Command: list spawnpoints'),
 (867,'Command: reload quest_greeting_locale'),
-(870,'Command: debug threatinfo');
+(870,'Command: debug threatinfo'),
+(871,'Command: reload creature_movement_override');
 /*!40000 ALTER TABLE `rbac_permissions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1828,7 +1830,8 @@ INSERT INTO `updates` VALUES
 ('2017_10_29_00_auth.sql','0AF3E442B2F312D4F396EC07517B156EF2BFF0F4','RELEASED','2017-10-08 12:30:47',16),
 ('2017_12_17_00_auth.sql','2CD99730D4D32DBF0584CD5B1AA6F8F4AE3DA975','RELEASED','2017-12-17 03:17:39',52),
 ('2018_01_03_00_auth_2018_01_02_00_auth.sql','08AF5DAB45515B681B738DA17FA414C7C7CCA44E','RELEASED','2018-01-02 20:40:37',0),
-('2018_01_09_00_auth.sql','A5D4EC8FCFAB4F2DCE70EDCAD1ACBFB484FD68D5','RELEASED','2018-01-09 00:00:00',0);
+('2018_01_09_00_auth.sql','A5D4EC8FCFAB4F2DCE70EDCAD1ACBFB484FD68D5','RELEASED','2018-01-09 00:00:00',0),
+('2018_xx_xx_20961_auth.sql','','RELEASED','2018-01-12 15:10:11',0);
 /*!40000 ALTER TABLE `updates` ENABLE KEYS */;
 UNLOCK TABLES;
 
