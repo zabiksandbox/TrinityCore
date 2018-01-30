@@ -2263,7 +2263,7 @@ Rate.RepairCost = 1
 #        Default:     1 - (Rate.Rest.InGame)
 #                     1 - (Rate.Rest.Offline.InTavernOrCity)
 #                     1 - (Rate.Rest.Offline.InWilderness)
-
+Restbonus = 6000
 Rate.Rest.InGame                 = 1
 Rate.Rest.Offline.InTavernOrCity = 1
 Rate.Rest.Offline.InWilderness   = 1
