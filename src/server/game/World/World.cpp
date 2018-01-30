@@ -749,6 +749,16 @@ void World::LoadConfigSettings(bool reload)
     }
     else
         m_int_configs[CONFIG_GAME_TYPE] = sConfigMgr->GetIntDefault("GameType", 0);
+	
+	if (reload)
+    {
+        uint32 val = sConfigMgr->GetIntDefault("Restbonus", 0);
+        if (val != m_int_configs[REST_BONUS])
+            TC_LOG_ERROR("server.loading", "Restbonus option can't be changed at worldserver.conf reload, using current value (%u).", m_int_configs[REST_BONUS]);
+    }
+    else
+        m_int_configs[REST_BONUS] = sConfigMgr->GetIntDefault("Restbonus", 0);
+
 
     if (reload)
     {
